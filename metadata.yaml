@@ -1,0 +1,5 @@
+homepage: "https://pulsepanda.dev"
+documentation: "https://pulsepanda.dev/docs"
+versions:
+  - sha: 8e93be3268390e16ff09b0d014de2948db723af7
+    changeNotes: Initial release.
