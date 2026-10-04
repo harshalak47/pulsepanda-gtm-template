@@ -68,6 +68,48 @@ ___TEMPLATE_PARAMETERS___
         "type": "EQUALS"
       }
     ]
+  },
+  {
+    "type": "CHECKBOX",
+    "name": "consentDefaults",
+    "checkboxText": "Set Google Consent Mode defaults (PulsePanda banner)",
+    "simpleValueType": true,
+    "defaultValue": false,
+    "help": "For sites that use PulsePanda's cookie banner. The tag sets Google Consent Mode v2 defaults to denied, restores a returning visitor's saved choice, and the banner then sends each decision to Google tags. Fire this tag on <strong>Consent Initialization - All Pages</strong>. Leave it off if another consent tool sets Google consent."
+  },
+  {
+    "type": "TEXT",
+    "name": "deniedRegions",
+    "displayName": "Deny by default only in these regions (optional)",
+    "simpleValueType": true,
+    "help": "Comma-separated ISO 3166-2 codes, for example <code>AT,BE,DE,FR,GB</code>. Visitors elsewhere default to granted. Leave empty to default to denied everywhere.",
+    "enablingConditions": [
+      {
+        "paramName": "consentDefaults",
+        "paramValue": true,
+        "type": "EQUALS"
+      }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "name": "waitForUpdate",
+    "displayName": "Wait for an update (ms)",
+    "simpleValueType": true,
+    "defaultValue": 500,
+    "help": "How long Google tags wait for the banner's decision before firing with the defaults.",
+    "valueValidators": [
+      {
+        "type": "NON_NEGATIVE_NUMBER"
+      }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "consentDefaults",
+        "paramValue": true,
+        "type": "EQUALS"
+      }
+    ]
   }
 ]
 
@@ -77,8 +119,65 @@ ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 const injectScript = require('injectScript');
 const encodeUriComponent = require('encodeUriComponent');
 const makeString = require('makeString');
+const makeNumber = require('makeNumber');
+const getType = require('getType');
+const getTimestampMillis = require('getTimestampMillis');
+const JSON = require('JSON');
+const localStorage = require('localStorage');
+const setDefaultConsentState = require('setDefaultConsentState');
+const updateConsentState = require('updateConsentState');
 
 const SDK_URL = 'https://pulsepanda.dev/sdk.js';
+
+// PulsePanda consent categories and the Consent Mode v2 signals each one
+// controls. The SDK sends the same mapping when a visitor decides.
+const SIGNALS = {
+  analytics: ['analytics_storage'],
+  marketing: ['ad_storage', 'ad_user_data', 'ad_personalization'],
+  preferences: ['functionality_storage', 'personalization_storage']
+};
+const CATEGORIES = ['analytics', 'marketing', 'preferences'];
+const DEFAULT_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1000;
+
+function consentState(isGranted) {
+  const state = { security_storage: 'granted' };
+  CATEGORIES.forEach((category) => {
+    SIGNALS[category].forEach((signal) => {
+      state[signal] = isGranted(category) ? 'granted' : 'denied';
+    });
+  });
+  return state;
+}
+
+// The visitor's saved banner choice ({categories, ts, exp}), unless expired.
+function storedCategories() {
+  const raw = localStorage.getItem('_pp_consent');
+  if (!raw) return null;
+  const stored = JSON.parse(raw);
+  if (getType(stored) !== 'object' || getType(stored.categories) !== 'object') return null;
+  const expires = stored.exp ? makeNumber(stored.exp) : makeNumber(stored.ts) + DEFAULT_MAX_AGE_MS;
+  if (!(expires > getTimestampMillis())) return null;
+  return stored.categories;
+}
+
+if (data.consentDefaults) {
+  const denied = consentState(() => false);
+  const wait = data.waitForUpdate === undefined || data.waitForUpdate === '' ? 500 : makeNumber(data.waitForUpdate);
+  denied.wait_for_update = wait >= 0 ? wait : 500;
+  const regions = [];
+  makeString(data.deniedRegions || '').split(',').forEach((region) => {
+    if (region.trim()) regions.push(region.trim().toUpperCase());
+  });
+  if (regions.length) {
+    denied.region = regions;
+    setDefaultConsentState(denied);
+    setDefaultConsentState(consentState(() => true));
+  } else {
+    setDefaultConsentState(denied);
+  }
+  const saved = storedCategories();
+  if (saved) updateConsentState(consentState((category) => saved[category] === true));
+}
 
 let url = SDK_URL + '?key=' + encodeUriComponent(makeString(data.siteKey).trim());
 if (data.captureDataLayer) {
@@ -108,6 +207,298 @@ ___WEB_PERMISSIONS___
               {
                 "type": 1,
                 "string": "https://pulsepanda.dev/sdk.js*"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "access_consent",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "consentTypes",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_user_data"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_personalization"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "analytics_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "functionality_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "personalization_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "security_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "access_local_storage",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "keys",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "_pp_consent"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
               }
             ]
           }
@@ -149,6 +540,75 @@ scenarios:
     mock('injectScript', (url, onSuccess, onFailure) => { onFailure(); });
     runCode({ siteKey: 'abc123' });
     assertApi('gtmOnFailure').wasCalled();
+- name: Leaves Google consent alone unless asked
+  code: |-
+    mock('injectScript', (url, onSuccess) => { onSuccess(); });
+    runCode({ siteKey: 'abc123' });
+    assertApi('setDefaultConsentState').wasNotCalled();
+    assertApi('updateConsentState').wasNotCalled();
+- name: Sets denied defaults everywhere
+  code: |-
+    let defaults = [];
+    mock('injectScript', (url, onSuccess) => { onSuccess(); });
+    mock('setDefaultConsentState', (state) => { defaults.push(state); });
+    mock('localStorage', { getItem: () => null });
+    runCode({ siteKey: 'abc123', consentDefaults: true, waitForUpdate: '800' });
+    assertThat(defaults).isEqualTo([{
+      security_storage: 'granted',
+      analytics_storage: 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+      functionality_storage: 'denied',
+      personalization_storage: 'denied',
+      wait_for_update: 800
+    }]);
+    assertApi('updateConsentState').wasNotCalled();
+    assertApi('gtmOnSuccess').wasCalled();
+- name: Denies only in the listed regions
+  code: |-
+    let defaults = [];
+    mock('injectScript', (url, onSuccess) => { onSuccess(); });
+    mock('setDefaultConsentState', (state) => { defaults.push(state); });
+    mock('localStorage', { getItem: () => null });
+    runCode({ siteKey: 'abc123', consentDefaults: true, deniedRegions: ' de, fr ,' });
+    assertThat(defaults.length).isEqualTo(2);
+    assertThat(defaults[0].region).isEqualTo(['DE', 'FR']);
+    assertThat(defaults[0].analytics_storage).isEqualTo('denied');
+    assertThat(defaults[0].wait_for_update).isEqualTo(500);
+    assertThat(defaults[1].region).isUndefined();
+    assertThat(defaults[1].ad_storage).isEqualTo('granted');
+- name: Restores a saved banner choice
+  code: |-
+    let update;
+    mock('injectScript', (url, onSuccess) => { onSuccess(); });
+    mock('updateConsentState', (state) => { update = state; });
+    mock('getTimestampMillis', () => 1000);
+    mock('localStorage', { getItem: () => '{"v":1,"categories":{"analytics":true,"marketing":false},"ts":900,"exp":2000}' });
+    runCode({ siteKey: 'abc123', consentDefaults: true });
+    assertApi('setDefaultConsentState').wasCalled();
+    assertThat(update).isEqualTo({
+      security_storage: 'granted',
+      analytics_storage: 'granted',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+      functionality_storage: 'denied',
+      personalization_storage: 'denied'
+    });
+- name: Ignores an expired choice
+  code: |-
+    mock('injectScript', (url, onSuccess) => { onSuccess(); });
+    mock('getTimestampMillis', () => 5000);
+    mock('localStorage', { getItem: () => '{"categories":{"analytics":true},"ts":900,"exp":2000}' });
+    runCode({ siteKey: 'abc123', consentDefaults: true });
+    assertApi('updateConsentState').wasNotCalled();
+- name: Ignores an unreadable choice
+  code: |-
+    mock('injectScript', (url, onSuccess) => { onSuccess(); });
+    mock('localStorage', { getItem: () => 'not json' });
+    runCode({ siteKey: 'abc123', consentDefaults: true });
+    assertApi('updateConsentState').wasNotCalled();
 
 
 ___NOTES___
