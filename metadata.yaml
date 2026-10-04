@@ -1,6 +1,8 @@
 homepage: "https://pulsepanda.dev"
 documentation: "https://github.com/harshalak47/pulsepanda-gtm-template#readme"
 versions:
+  - sha: 61c5428c7f651a745af1fbf852bebcad1e20b6ca
+    changeNotes: Fixes the template description length and the Consent Mode tests for Tag Manager's test runner.
   - sha: 74f4771e28595bd5459b2e7b3051f7de3d036b26
     changeNotes: Optional Google Consent Mode v2 defaults for the PulsePanda cookie banner, with an optional region list; restores a returning visitor's saved choice.
   - sha: 8e93be3268390e16ff09b0d014de2948db723af7
