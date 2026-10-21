@@ -52,7 +52,7 @@ ___TEMPLATE_PARAMETERS___
     "name": "captureDataLayer",
     "checkboxText": "Send dataLayer events as custom events",
     "simpleValueType": true,
-    "defaultValue": false,
+    "defaultValue": true,
     "help": "Events pushed with <code>dataLayer.push({ event: ... })</code> or <code>gtag('event', ...)</code> are sent to PulsePanda as custom events. Nested fields become dotted properties (ecommerce.value); GTM's own gtm.* events, page_view, and fields that look like contact details are left out."
   },
   {

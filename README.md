@@ -11,7 +11,7 @@ Adds [PulsePanda](https://pulsepanda.dev) analytics, session replay and heatmaps
 
 ## dataLayer events
 
-Tick **Send dataLayer events as custom events** to send events your site already pushes to Tag Manager as PulsePanda custom events:
+**Send dataLayer events as custom events** is ticked by default on new tags (untick it to opt out). It sends events your site already pushes to Tag Manager as PulsePanda custom events:
 
 ```js
 dataLayer.push({ event: 'purchase', ecommerce: { transaction_id: 'T1', value: 49.5, currency: 'USD', items: [/* … */] } });
